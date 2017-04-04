@@ -52,8 +52,6 @@ public:
 	void rotatePawn(float r);
 	void moveX(float x);
 	void moveY(float y);
-	void startGrowing();
-	void stopGrowing();
 
 	//Input variables
 	FVector currVel;
@@ -75,6 +73,12 @@ public:
 	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	UPROPERTY(EditAnywhere)
 		float rad;	//SweepResult doesn't show anything!!! So, Sweep trace done to get hit & normal
+
+	FRotator targRot;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+		float rotationSpeed;
+	bool interp;
 
 };
 

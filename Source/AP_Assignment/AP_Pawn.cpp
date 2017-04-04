@@ -34,6 +34,8 @@ AAP_Pawn::AAP_Pawn(){
 	isMovingFwd = false;	//****
 	isMovingRgt = false;
 	rad = 100.0f;
+	interp = false;
+	rotationSpeed = 1.0f;
 }
 
 // Called when the game starts or when spawned
@@ -42,11 +44,10 @@ void AAP_Pawn::BeginPlay(){
 
 	UAIPerceptionSystem::RegisterPerceptionStimuliSource(this, UAISense_Sight::StaticClass(), this);
 
-	AProjectile::numOfHits = 0;	//****stops static being reused when game restarted.
-
+	AProjectile::numOfHits = 0;	//stops static being reused when game restarted.
+	targRot = GetActorRotation();	//****
 	UWorld* World = GetWorld();
-	if (World) {
-		// Attempt to fire an enemy
+	if (World) {	// Spawn targets
 		FVector targLoc;
 		FRotator projRot = FRotator::ZeroRotator;
 		FActorSpawnParameters SpawnParams;
@@ -65,17 +66,16 @@ void AAP_Pawn::BeginPlay(){
 // Called every frame
 void AAP_Pawn::Tick( float DeltaTime ){
 	Super::Tick( DeltaTime );
-	// Handle growing and shrinking based on our "Grow" action
-	float currScale = collisionComponent->GetComponentScale().X;
-	if (isGrowing)
-		// Grow to double size over the course of one second
-		currScale += DeltaTime;
-	else
-		// Shrink half as fast as we grow
-		currScale -= (DeltaTime * 0.5f);
-	// Ensure we never drop below starting size, or increase past double size.
-	currScale = FMath::Clamp(currScale, 1.0f, 2.0f);
-	collisionComponent->SetWorldScale3D(FVector(currScale));
+
+	if (interp) {	//interpolate 
+		FRotator nr = FMath::RInterpTo(GetActorForwardVector().Rotation(), targRot, DeltaTime, rotationSpeed);
+		nr.Pitch = nr.Roll = 0.0f;
+		if ((nr - targRot).IsNearlyZero(0.5f)) {
+			nr = targRot;
+			interp = false;
+		}
+		SetActorRotation(nr);
+	}
 
 	// Handle movement based on "MoveX" and "MoveY" axes
 	if (!currVel.IsZero()) {
@@ -88,15 +88,12 @@ void AAP_Pawn::Tick( float DeltaTime ){
 		newRot.Yaw += angle;	//rotate about Z axis
 		SetActorRotation(newRot);
 	}
-
 }
 
 // Called to bind functionality to input
 void AAP_Pawn::SetupPlayerInputComponent(class UInputComponent* InputComponent){
 	Super::SetupPlayerInputComponent(InputComponent);
 	// Respond when our "Grow" key is pressed or released.
-	InputComponent->BindAction("Grow", IE_Pressed, this, &AAP_Pawn::startGrowing);
-	InputComponent->BindAction("Grow", IE_Released, this, &AAP_Pawn::stopGrowing);
 	InputComponent->BindAction("Fire", IE_Released, this, &AAP_Pawn::fire);
 
 	// Respond each frame to: "MoveX" &"MoveY" and Rotate.
@@ -126,14 +123,6 @@ void AAP_Pawn::moveY(float y) {
 	currVel += GetActorRightVector() * y * SPEED;
 }
 
-void AAP_Pawn::startGrowing() {
-	isGrowing = true;
-}
-
-void AAP_Pawn::stopGrowing() {
-	isGrowing = false;
-}
-
 void AAP_Pawn::turn(float t) {
 	FRotator newRot = GetActorRotation();
 	newRot.Yaw += t;	//rotate about Z axis
@@ -146,8 +135,7 @@ void AAP_Pawn::lookUp(float l) {
 	camera->SetWorldRotation(NewRotation);
 }
 
-void AAP_Pawn::fire() {
-	// Attempt to fire a projectile.
+void AAP_Pawn::fire() {		// Attempt to fire a projectile.
 	FVector projLoc = GetActorLocation() + FVector(0.0f, 0.0f, 100.0f);
 	FRotator projRot = FRotator::ZeroRotator;
 
@@ -158,8 +146,7 @@ void AAP_Pawn::fire() {
 		SpawnParams.Instigator = Instigator;
 		AProjectile *proj = World->SpawnActor<AProjectile>(ProjectileClass, projLoc, projRot, SpawnParams);
 
-		if (proj) {
-			// Set the projectile's initial trajectory.
+		if (proj) {	// Set the projectile's initial trajectory.
 			float p = camera->GetRelativeTransform().Rotator().Pitch + 45.0f;
 			FVector dir = GetActorForwardVector().RotateAngleAxis(p, GetActorRightVector());
 			proj->FireInDirection(dir.GetSafeNormal());	
@@ -168,7 +155,7 @@ void AAP_Pawn::fire() {
 }
 
 void AAP_Pawn::OnBeginOverlap(UPrimitiveComponent *OverlappedComp, AActor *OtherActor, UPrimitiveComponent *OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult &SweepResult){
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Pawn trigger overlap"));
+//	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Pawn trigger overlap"));
 	FString name = OtherActor->GetFName().ToString();
 	if (name.Contains("Wall")) {	//only chk collisions with wall
 		FVector dir = GetActorForwardVector(); dir.Z = 0.0f;
@@ -184,24 +171,17 @@ void AAP_Pawn::OnBeginOverlap(UPrimitiveComponent *OverlappedComp, AActor *Other
 		//			TraceParams.AddIgnoredActor(actorToIgnore);
 
 		FHitResult hit = FHitResult(ForceInit); //Re-initialize hit info
-	//			FCollisionShape cap = FCollisionShape::MakeCapsule(rad / 3.0f, 10.0f);
-	//			DrawDebugCapsule(GetWorld(), curPos, cap.GetCapsuleHalfHeight(), cap.GetCapsuleRadius(), FQuat(), FColor::Cyan, true, 3.0f);
 	//			DrawDebugCapsule(GetWorld(), curPos, rad / 3.0f, 10.0f, FQuat(), FColor::Cyan, true, 3.0f);		//**** CRASHES!!!
-	//			GetWorld()->SweepSingleByChannel(hit, curPos, endTrace, FQuat(), ECC_Visibility, FCollisionShape::MakeSphere(rad), TraceParams); //gets floor collision!
 		GetWorld()->SweepSingleByChannel(hit, curPos, endTrace, FQuat(), ECC_Visibility, FCollisionShape::MakeCapsule(rad / 3.0f, 10.0f), TraceParams);
 		UE_LOG(LogTemp, Warning, TEXT("hit: %s"), *hit.ToString());
 
 		SetActorLocation(curPos + hit.Normal * 10.0f);	//move away from wall!
 		FVector newDir = dir - 2.0f*FVector::DotProduct(dir, hit.Normal) * hit.Normal;
-		SetActorRotation(newDir.Rotation());	//rotate away from wall
+//		SetActorRotation(newDir.Rotation());	//immediately rotate away from wall
+		targRot = newDir.Rotation(); targRot.Pitch = targRot.Roll = 0.0f;
+		interp = true;
 	}
 }
 
 void AAP_Pawn::OnOverlapEnd(UPrimitiveComponent * OverlappedComp, AActor * OtherActor, UPrimitiveComponent * OtherComp, int32 OtherBodyIndex){
 }
-
-
-
-
-
-
