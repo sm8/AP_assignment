@@ -1,0 +1,86 @@
+// SM
+
+#pragma once
+
+#include "Projectile.h"
+#include "Target.h"
+#include "GameFramework/Pawn.h"
+#include "AP_Pawn.generated.h"
+
+UCLASS()
+class AP_ASSIGNMENT_API AAP_Pawn : public APawn
+{
+	GENERATED_BODY()
+
+public:
+	// Sets default values for this pawn's properties
+	AAP_Pawn();
+
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+	
+	// Called every frame
+	virtual void Tick( float DeltaSeconds ) override;
+
+	// Called to bind functionality to input
+	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
+
+	UPROPERTY(EditAnywhere)
+		UCapsuleComponent* collisionComponent;
+
+	UPROPERTY(EditAnywhere)
+		UCameraComponent* camera;
+
+	// offset from the Owner pawn's location.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+		FVector projOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+		bool isMovingFwd;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+		bool isMovingRgt;
+
+	// Projectile class to spawn.
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+		TSubclassOf<class AProjectile> ProjectileClass;
+
+	// Target class to spawn.
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+		TSubclassOf<class ATarget> TargetClass;
+
+	//Input functions
+	void rotatePawn(float r);
+	void moveX(float x);
+	void moveY(float y);
+	void startGrowing();
+	void stopGrowing();
+
+	//Input variables
+	FVector currVel;
+	bool isGrowing;
+	const float SPEED = 100.0f;
+	float angle;
+
+	//Mouse Input functions
+	void turn(float t);
+	void lookUp(float l);
+
+	void fire();
+
+	const int NUM_TARGETS = 6;
+
+	UFUNCTION()
+	void OnBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+	UFUNCTION()
+	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+	UPROPERTY(EditAnywhere)
+		float rad;	//SweepResult doesn't show anything!!! So, Sweep trace done to get hit & normal
+
+};
+
+
+
+
+
+
+
