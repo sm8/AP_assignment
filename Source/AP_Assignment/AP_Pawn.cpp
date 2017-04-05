@@ -171,8 +171,12 @@ void AAP_Pawn::OnBeginOverlap(UPrimitiveComponent *OverlappedComp, AActor *Other
 		//			TraceParams.AddIgnoredActor(actorToIgnore);
 
 		FHitResult hit = FHitResult(ForceInit); //Re-initialize hit info
-	//			DrawDebugCapsule(GetWorld(), curPos, rad / 3.0f, 10.0f, FQuat(), FColor::Cyan, true, 3.0f);		//**** CRASHES!!!
-		GetWorld()->SweepSingleByChannel(hit, curPos, endTrace, FQuat(), ECC_Visibility, FCollisionShape::MakeCapsule(rad / 3.0f, 10.0f), TraceParams);
+		FQuat q; q = FQuat::Identity;
+//		DrawDebugCapsule(GetWorld(), curPos, rad / 3.0f, 10.0f, FQuat(), FColor::Cyan, true, 3.0f);		//**** CRASHES!!!
+//		DrawDebugCapsule(GetWorld(), curPos, rad / 3.0f, 10.0f, FQuat::Identity, FColor::Cyan, true, 3.0f);		
+		GetWorld()->DebugDrawTraceTag = TEXT("collCapTrace");	//shows collision with shape
+//		GetWorld()->SweepSingleByChannel(hit, curPos, endTrace, FQuat(), ECC_Visibility, FCollisionShape::MakeCapsule(rad / 3.0f, 10.0f), TraceParams);
+		GetWorld()->SweepSingleByChannel(hit, curPos, endTrace, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeCapsule(rad / 3.0f, 10.0f), TraceParams);
 		UE_LOG(LogTemp, Warning, TEXT("hit: %s"), *hit.ToString());
 
 		SetActorLocation(curPos + hit.Normal * 10.0f);	//move away from wall!

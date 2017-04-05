@@ -31,7 +31,7 @@ ATarget::ATarget(){
 	aiPercComp->OnPerceptionUpdated.AddDynamic(this, &ATarget::OnSensed);
 
 	currVel = FVector::ZeroVector;
-	speed = 30.0f;
+	speed = 200.0f;
 
 	isMoving = false;
 	interp = false;
@@ -60,7 +60,7 @@ void ATarget::Tick( float DeltaTime ){
 	// Handle movement based on where Target is to baseLoc
 	if (!currVel.IsZero()) {
 		FVector newLocation = GetActorLocation() + currVel * DeltaTime;
-//		UE_LOG(LogTemp, Warning, TEXT("diff sq=%f"), (newLocation - baseLoc).SizeSquared2D());
+		UE_LOG(LogTemp, Warning, TEXT("diff sq=%f dt=%f currVel: %s"), (newLocation - baseLoc).SizeSquared2D(), DeltaTime, *currVel.ToString());
 		if ((newLocation - baseLoc).SizeSquared2D() > 1.0f) {	//set if not at base
 			SetActorLocation(newLocation);
 			isMoving = true;
