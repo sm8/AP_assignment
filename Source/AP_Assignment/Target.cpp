@@ -31,7 +31,7 @@ ATarget::ATarget(){
 	aiPercComp->OnPerceptionUpdated.AddDynamic(this, &ATarget::OnSensed);
 
 	currVel = FVector::ZeroVector;
-	speed = 200.0f;
+	speed = 130.0f;
 
 	isMoving = false;
 	interp = false;
@@ -46,7 +46,7 @@ void ATarget::BeginPlay(){
 	APawn* pawn = *pIterator;	//as we know ONLY 1 pawn obj!
 	FVector newD = pawn->GetActorLocation() - GetActorLocation();	//find diff 'tween pawn and Target loc
 	newD.Z = 0.0f;	//we are NOT interested in any Z diff
-	FRotator rotDir = newD.Rotation() - GetActorForwardVector().Rotation();	//calc diff in reqid dir & curr. dir
+	FRotator rotDir = newD.Rotation() - GetActorForwardVector().Rotation();	//calc diff in reqd dir & curr. dir
 	rotDir.Normalize();	//ensure rotation is a unit vector
 	SetActorRotation(rotDir);
 	//draw a debug line to check it goes from Target to Pawn in 'new' dir
@@ -60,13 +60,15 @@ void ATarget::Tick( float DeltaTime ){
 	// Handle movement based on where Target is to baseLoc
 	if (!currVel.IsZero()) {
 		FVector newLocation = GetActorLocation() + currVel * DeltaTime;
-		UE_LOG(LogTemp, Warning, TEXT("diff sq=%f dt=%f currVel: %s"), (newLocation - baseLoc).SizeSquared2D(), DeltaTime, *currVel.ToString());
+//		UE_LOG(LogTemp, Warning, TEXT("diff sq=%f dt=%f currVel: %s"), (newLocation - baseLoc).SizeSquared2D(), DeltaTime, *currVel.ToString());
 		if ((newLocation - baseLoc).SizeSquared2D() > 1.0f) {	//set if not at base
 			SetActorLocation(newLocation);
 			isMoving = true;
+			speed = 30.0f;
 		} else {
 			currVel = FVector::ZeroVector;	//****
 			isMoving = false;
+			speed = 130.0f;
 		}
 	}
 
@@ -92,6 +94,7 @@ void ATarget::OnSensed(TArray<AActor*> testActors) {
 			currVel = dir.GetSafeNormal() * speed;	//set vel towards actor
 			setNewRotation(this, testActors[i]->GetActorLocation(), GetActorLocation()); //rotate
 		} else {	//actor has moved away from radius
+			speed = 30.0f;
 			FVector dir = baseLoc - GetActorLocation();
 			dir.Z = 0.0f;	//reset as they may be at diff Z values
 			if (dir.SizeSquared2D() > 1.0f) {	//set vel towards baseLoc
