@@ -5,7 +5,37 @@
 #include "Target.h"
 #include "Perception/AISense_Sight.h"	//used to register this pawn
 #include "Wall.h"	//****
+#include "FileHelpers.h"
+#include "HighResScreenShot.h"
 
+void SaveTexture2DDebug(const uint8* PPixelData, int width, int height, FString Filename) {
+	TArray<FColor> OutBMP;
+	int w = width;
+	int h = height;
+
+	OutBMP.InsertZeroed(0, w*h);
+
+	for (int i = 0; i < (w*h); ++i) {
+		uint8 R = PPixelData[i * 4 + 2];
+		uint8 G = PPixelData[i * 4 + 1];
+		uint8 B = PPixelData[i * 4 + 0];
+		uint8 A = PPixelData[i * 4 + 3];
+
+		OutBMP[i].R = R;
+		OutBMP[i].G = G;
+		OutBMP[i].B = B;
+		OutBMP[i].A = A;
+	}
+
+	FIntPoint DestSize(w, h);
+
+	FString ResultPath;
+	FHighResScreenshotConfig& HighResScreenshotConfig = GetHighResScreenshotConfig();
+	bool bSaved = HighResScreenshotConfig.SaveImage(Filename, OutBMP, DestSize, &ResultPath);
+
+	UE_LOG(LogTemp, Warning, TEXT("SaveTexture2DDebug: %d %d"), w, h);
+	UE_LOG(LogTemp, Warning, TEXT("SaveTexture2DDebug: %s %d"), *ResultPath, bSaved == true ? 1 : 0);
+}
 // Sets default values
 AAP_Pawn::AAP_Pawn(){
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -36,6 +66,7 @@ AAP_Pawn::AAP_Pawn(){
 	rad = 100.0f;
 	interp = false;
 	rotationSpeed = 1.0f;
+	totTime = prevTime = 0.0f;
 }
 
 // Called when the game starts or when spawned
@@ -67,6 +98,8 @@ void AAP_Pawn::BeginPlay(){
 void AAP_Pawn::Tick( float DeltaTime ){
 	Super::Tick( DeltaTime );
 
+	totTime += DeltaTime;	//****
+
 	if (interp) {	//interpolate 
 		FRotator nr = FMath::RInterpTo(GetActorForwardVector().Rotation(), targRot, DeltaTime, rotationSpeed);
 		nr.Pitch = nr.Roll = 0.0f;
@@ -81,6 +114,15 @@ void AAP_Pawn::Tick( float DeltaTime ){
 	if (!currVel.IsZero()) {
 		FVector newLocation = GetActorLocation() + currVel * DeltaTime;
 		SetActorLocation(newLocation);
+		PosData p(newLocation.X, newLocation.Y, newLocation.Z, totTime - prevTime);
+		pawnPs.Add(p);
+		FString d = FString::Printf(TEXT("%f,%f,%f,%f"), newLocation.X, newLocation.Y, newLocation.Z, totTime-prevTime);
+		pawnPositions.Add(d);
+		allPawnPos += d + "\r\n";
+		prevTime = totTime;
+		//IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+		//FFileHelper::SaveStringToFile(d, TEXT("pawnPos.txt"),FFileHelper::EEncodingOptions::AutoDetect, &IFileManager::Get());
+
 	}
 	// Handle angular movement based on Rotate
 	if (angle != 0.0f) {
@@ -107,7 +149,62 @@ void AAP_Pawn::SetupPlayerInputComponent(class UInputComponent* InputComponent){
 }
 
 void AAP_Pawn::rotatePawn(float r) {
-	angle = r;
+//	angle = r;
+	if (r != 0.0f) {
+		FFileHelper::SaveStringToFile(allPawnPos, TEXT("pawnPos.txt"));	//save x,y,z,dt vals to txt file
+		int w, h; 
+		h = w = 256;	//****NOMINAL
+		uint8 *pixels = new uint8[w*h*4];	//4*8bits for each colour & alpha
+		float gx, gy, *fPpixels = new float[w*h];
+//		for (int i = 0; i < w*h*4; i++) pixels[i] = 0;	//init
+
+		float maxX, maxY; maxX = maxY = 1000.0f;	//assume floor +/- 1000
+		gx = 2.0f*maxX / (float)w;  gy = 2.0f*maxY / (float)h;
+		float minX, minY; minX = minY = -1000.0f;	//assume floor +/- 1000
+		float epsilon = 0.001f;	//for error in calcs
+
+		float lx, ly, hx, hy;
+		lx = hx = pawnPs[0].x; ly = hy = pawnPs[0].y;
+		for (int i = 1; i < pawnPs.Num(); i++) {
+			if (pawnPs[i].x < lx) lx = pawnPs[i].x;	//get low / high vals in x & y
+			if (pawnPs[i].x > hx) hx = pawnPs[i].x;
+			if (pawnPs[i].y < ly) ly = pawnPs[i].y;
+			if (pawnPs[i].y > hy) hy = pawnPs[i].y;
+	
+			float tr = gx*0.5f, rad = 50.0f, rx, ry;	//****
+//			const int NUM_CHKS = 8;
+//			float angle = FMath::DegreesToRadians(360.0f / ((float)NUM_TARGETS));
+			while (tr < rad) {
+//FVector targLoc = GetActorLocation() + FVector(500.0f*FMath::Cos((float)i*angle), 500.0f*FMath::Sin((float)i*angle), 50.0f);
+				for (int k = 0; k < 5; k++) {	//chk middle & each corner about ctr too
+					rx = pawnPs[i].x; ry = pawnPs[i].y;
+					if (k == 1) { rx += tr; ry += tr; }	//chk each corner
+					if (k == 2) { rx -= tr; ry += tr; }
+					if (k == 3) { rx -= tr; ry -= tr; }
+					if (k == 4) { rx += tr; ry -= tr; }
+					float px = (rx - minX) / (gx + epsilon);	//calc grid pos
+					int xp = (int)px + 1;
+					float py = (ry - minY) / (gy + epsilon);
+					int yp = (int)py + 1;
+					for (int j = 0; j < 3; j++)
+						pixels[4 * (xp + yp*w) + j] = 80;	//add 1 to grid counts
+					pixels[4 * (xp + yp*w) + 3] = 255;	//set alpha
+				}
+				tr += gx*0.5f;
+			}
+		}
+		FFileHelper::SaveStringToFile(allPawnPos, TEXT("pawnPos.txt"));
+		FString arrayOut = "Num,Value\n";
+
+		for (int i = 0; i < w*h * 4; i++)
+			arrayOut += FString::Printf(TEXT("%d,%d\n"), i, pixels[i]);
+		arrayOut += FString::Printf(TEXT("\nMin,=MIN(B2:B%d)\n"), w*h * 4 + 1);	//For Excel, output Summary stats
+		arrayOut += FString::Printf(TEXT("\nMax,=MAX(B2:B%d)\n"), w*h * 4 + 1);
+		arrayOut += FString::Printf(TEXT("\nAvg,=AVERAGE(B2:B%d)\n"), w*h * 4 + 1);
+		FFileHelper::SaveStringToFile(arrayOut, TEXT("pawnPos.csv"));
+
+		SaveTexture2DDebug(pixels, w, h, "newPawnPos.png");
+	}
 }
 
 void AAP_Pawn::moveX(float x) {

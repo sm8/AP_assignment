@@ -80,6 +80,15 @@ public:
 		float rotationSpeed;
 	bool interp;
 
+
+	float totTime, prevTime;
+	struct PosData {
+		float x, y, z, dt;
+		PosData(float nx, float ny, float nz, float ndt) { x = nx; y = ny; z = nz; dt = ndt; }
+	};
+	TArray<PosData> pawnPs;
+	TArray<FString> pawnPositions;
+	FString allPawnPos;
 };
 
 
