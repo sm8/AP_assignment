@@ -22,6 +22,8 @@ public:
 	// Called every frame
 	virtual void Tick( float DeltaSeconds ) override;
 
+	void updatePositionData(FVector &newLocation);
+
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
 
@@ -80,8 +82,7 @@ public:
 		float rotationSpeed;
 	bool interp;
 
-
-	float totTime, prevTime;
+	float totTime, prevTime, maxTimeAtPos;	//for Heatmap 
 	struct PosData {
 		float x, y, z, dt;
 		PosData(float nx, float ny, float nz, float ndt) { x = nx; y = ny; z = nz; dt = ndt; }
@@ -89,6 +90,8 @@ public:
 	TArray<PosData> pawnPs;
 	TArray<FString> pawnPositions;
 	FString allPawnPos;
+	void outputArrayCSVfile(int w, int h, uint8 *pixels);
+	unsigned int getGridPos(float rx, float minX, float gx);
 };
 
 
