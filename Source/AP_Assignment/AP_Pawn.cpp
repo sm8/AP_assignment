@@ -92,6 +92,20 @@ void AAP_Pawn::BeginPlay(){
 			targ->baseLoc = targLoc;
 		}
 	}
+
+	//**** for Heatmap
+	FVector orig, maxB;
+	for (TActorIterator<AStaticMeshActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
+		UE_LOG(LogTemp, Warning, TEXT("name:  %s"), *ActorItr->GetName());
+		if (ActorItr->GetName().Contains("Floor")) {	//get sizes for Heatmap
+			ActorItr->GetActorBounds(true, orig, maxB);
+			maxX = maxB.X; maxY = maxB.Y;
+			minX = -maxX; minY = -maxY;
+		}
+	}
+	GetActorBounds(true, orig, maxB);
+	pawnRad = maxB.X;
+	h = w = 256;	//****NOMINAL
 }
 
 // Called every frame
@@ -154,53 +168,35 @@ void AAP_Pawn::SetupPlayerInputComponent(class UInputComponent* InputComponent){
 void AAP_Pawn::rotatePawn(float r) {
 //	angle = r;
 	if (r != 0.0f) {
-		float diffT = totTime - prevTime;	//get LAST pos
-		if (diffT > maxTimeAtPos) maxTimeAtPos = diffT;
-		pawnPs[pawnPs.Num()-1].dt = diffT;	//add to dyn array
-		FVector newLocation = GetActorLocation();
-		FString d = FString::Printf(TEXT("%f,%f,%f,%f"), newLocation.X, newLocation.Y, newLocation.Z, diffT);
-		pawnPositions.RemoveAt(pawnPositions.Num()-1);	//remove last pos
-		pawnPositions.Add(d);	//add to dyn string array
-		allPawnPos += d + "\r\n";	//append for txt output
+		updateLastPositionInArrays();
 
-		FFileHelper::SaveStringToFile(allPawnPos, TEXT("pawnPos.txt"));	//save x,y,z,dt vals to txt file
-		int w, h; 
-		h = w = 256;	//****NOMINAL
 		uint8 *pixels = new uint8[w*h*4];	//4*8bits for each colour & alpha
-		float gx, gy, *fPpixels = new float[w*h];
 		for (int i = 0; i < w*h*4; i++) pixels[i] = 0;	//init
 
-		float maxX, maxY; maxX = maxY = 1000.0f;	//assume floor +/- 1000
-		gx = 2.0f*maxX / (float)w;  gy = 2.0f*maxY / (float)h;
-		float minX, minY; minX = minY = -1000.0f;	//assume floor +/- 1000
+		float gx = (maxX - minX) / (float)w;  	//calc 'grid' sizes
+		float gy = (maxY-minY) / (float)h;
 
-		float lx, ly, hx, hy;
-		lx = hx = pawnPs[0].x; ly = hy = pawnPs[0].y;
-		const int NUM_CHKS = 36;
+		const int NUM_CHKS = 36;	//num of times to calc ang around ctr
 		float angle = FMath::DegreesToRadians(360.0f / ((float)NUM_CHKS));
-		float tr, rad = 50.0f, rx, ry;	//****
-		for (int i = 0; i < pawnPs.Num(); i++) {
-			//if (pawnPs[i].x < lx) lx = pawnPs[i].x;	//get low / high vals in x & y
-			//if (pawnPs[i].x > hx) hx = pawnPs[i].x;
-			//if (pawnPs[i].y < ly) ly = pawnPs[i].y;
-			//if (pawnPs[i].y > hy) hy = pawnPs[i].y;
-			tr = 0.0f;
-			while (tr < rad) {
+		float tr, rx, ry;	//****
+		for (int i = 0; i < pawnPs.Num(); i++) {	//process each pawn pos
+			tr = 0.0f;	//start at ctr. This is inefficient!
+			while (tr < pawnRad) {	
 				for (int k = 0; k < NUM_CHKS; k++) {	//chk around ctr
 					rx = pawnPs[i].x; ry = pawnPs[i].y;
 					rx += tr*FMath::Cos((float)k*angle);
 					ry += tr*FMath::Sin((float)k*angle);
-					int xp = getGridPos(rx, minX, gx);
+					int xp = getGridPos(rx, minX, gx);	//calc array pos
 					int yp = getGridPos(ry, minY, gy);
 					uint8 newColour = (uint8)(254.0f * pawnPs[i].dt / maxTimeAtPos) + 1;
-					//int oldColour = pixels[4 * (xp + yp*w) + j];
-					//if (newColour > oldColour) pixels[4 * (xp + yp*w) + 2] = newColour;	//Red
-					pixels[4 * (xp + yp*w) + 2] |= newColour;	//Red
+					int oldColour = pixels[4 * (xp + yp*w) + 2];
+					if (newColour > oldColour) pixels[4 * (xp + yp*w) + 2] = newColour;	//Red
+//					pixels[4 * (xp + yp*w) + 2] |= newColour;	//Red
 					pixels[4 * (xp + yp*w)] = 10;	//set blue
 					pixels[4 * (xp + yp*w) + 1] = 100;	//set green
 					pixels[4 * (xp + yp*w) + 3] = 255;	//set alpha
 				}
-				tr += gx*0.5f;
+				tr += gx*0.5f;	//increase rad by half grid width each time
 			}
 		}
 		FFileHelper::SaveStringToFile(allPawnPos, TEXT("pawnPos.txt"));	//save x,y,z & dt
@@ -209,12 +205,23 @@ void AAP_Pawn::rotatePawn(float r) {
 	}
 }
 
+void AAP_Pawn::updateLastPositionInArrays(){
+	float diffT = totTime - prevTime;	//get LAST pos
+	if (diffT > maxTimeAtPos) maxTimeAtPos = diffT;
+	pawnPs[pawnPs.Num() - 1].dt = diffT;	//change last array time
+	FVector newLocation = GetActorLocation();
+	FString d = FString::Printf(TEXT("%f,%f,%f,%f"), newLocation.X, newLocation.Y, newLocation.Z, diffT);
+	pawnPositions.RemoveAt(pawnPositions.Num() - 1);	//remove last pos
+	pawnPositions.Add(d);	//add to dyn string array
+	allPawnPos += d + "\r\n";	//append for txt output
+}
+
 void AAP_Pawn::outputArrayCSVfile(int w, int h, uint8 *pixels){
 	FString arrayOut = "Num,Value\n";
 	for (int i = 0; i < w*h * 4; i++)
 		arrayOut += FString::Printf(TEXT("%d,%d\n"), i, pixels[i]);
-	arrayOut += FString::Printf(TEXT("\nMin,=MIN(B2:B%d)\n"), w*h * 4 + 1);	//For Excel, output Summary stats
-	arrayOut += FString::Printf(TEXT("\nMax,=MAX(B2:B%d)\n"), w*h * 4 + 1);
+	arrayOut += FString::Printf(TEXT("\nMin,=MIN(B2:B%d)"), w*h * 4 + 1);	//For Excel, output Summary stats
+	arrayOut += FString::Printf(TEXT("\nMax,=MAX(B2:B%d)"), w*h * 4 + 1);
 	arrayOut += FString::Printf(TEXT("\nAvg,=AVERAGE(B2:B%d)\n"), w*h * 4 + 1);
 	FFileHelper::SaveStringToFile(arrayOut, TEXT("pawnPos.csv"));
 }

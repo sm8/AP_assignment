@@ -52,6 +52,7 @@ public:
 
 	//Input functions
 	void rotatePawn(float r);
+	void updateLastPositionInArrays();
 	void moveX(float x);
 	void moveY(float y);
 
@@ -92,6 +93,8 @@ public:
 	FString allPawnPos;
 	void outputArrayCSVfile(int w, int h, uint8 *pixels);
 	unsigned int getGridPos(float rx, float minX, float gx);
+	float maxX, maxY, minX, minY, pawnRad;
+	int w, h;
 };
 
 
