@@ -95,14 +95,31 @@ void AAP_Pawn::BeginPlay(){
 
 	//**** for Heatmap
 	FVector orig, maxB;
-	for (TActorIterator<AStaticMeshActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
-		UE_LOG(LogTemp, Warning, TEXT("name:  %s"), *ActorItr->GetName());
+//	for (TActorIterator<AStaticMeshActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
+	for (TActorIterator<AActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
+//		UE_LOG(LogTemp, Warning, TEXT("name:  %s"), *ActorItr->GetName());
 		if (ActorItr->GetName().Contains("Floor")) {	//get sizes for Heatmap
 			ActorItr->GetActorBounds(true, orig, maxB);
 			maxX = maxB.X; maxY = maxB.Y;
 			minX = -maxX; minY = -maxY;
 		}
+		else {	//find ALL STATIC mesh comps, so can chk whether static
+			TArray<UStaticMeshComponent*> Components;
+			ActorItr->GetComponents<UStaticMeshComponent>(Components);
+			for (int32 i = 0; i<Components.Num(); i++){
+				UStaticMeshComponent* StaticMeshComponent = Components[i];
+				if (!StaticMeshComponent->Mobility) { //assume static is 0
+					ActorItr->GetActorBounds(true, orig, maxB);	//chk bounds of static obj
+					if(maxB.X > 0.0f && maxB.Y > 0.0f)	//Eg sky sphere is static but has 0 bounds
+						staticActors.Add(new ActorAndBounds(*ActorItr, orig, maxB));
+				}
+			}
+		}
 	}
+	//for (int32 i = 0; i < staticActors.Num(); i++) {	//****test array
+	//	UE_LOG(LogTemp, Warning, TEXT("Static actor name:  %s maxB: %s"), *staticActors[i]->actor->GetName(), *staticActors[i]->maxBounds.ToString());
+	//}
+
 	GetActorBounds(true, orig, maxB);
 	pawnRad = maxB.X;
 	h = w = 256;	//****NOMINAL
@@ -112,7 +129,7 @@ void AAP_Pawn::BeginPlay(){
 void AAP_Pawn::Tick( float DeltaTime ){
 	Super::Tick( DeltaTime );
 
-	totTime += DeltaTime;	//****
+	totTime += DeltaTime;	//used for Heatmap
 
 	if (interp) {	//interpolate 
 		FRotator nr = FMath::RInterpTo(GetActorForwardVector().Rotation(), targRot, DeltaTime, rotationSpeed);
@@ -128,7 +145,7 @@ void AAP_Pawn::Tick( float DeltaTime ){
 	if (!currVel.IsZero()) {
 		FVector newLocation = GetActorLocation() + currVel * DeltaTime;
 		SetActorLocation(newLocation);
-		updatePositionData(newLocation);
+		updatePositionData(newLocation);	//for Heatmap
 	}
 	// Handle angular movement based on Rotate
 	if (angle != 0.0f) {
@@ -199,11 +216,39 @@ void AAP_Pawn::rotatePawn(float r) {
 				tr += gx*0.5f;	//increase rad by half grid width each time
 			}
 		}
+		addStaticBoundsToHeatmap(pixels, gx, gy);
 		FFileHelper::SaveStringToFile(allPawnPos, TEXT("pawnPos.txt"));	//save x,y,z & dt
 		outputArrayCSVfile(w, h, pixels);	//for testing / debugging
 		SaveTexture2DDebug(pixels, w, h, "newPawnPos.png");	//create Heatmap as PNG
 	}
 }
+//
+// Draw STATIC objs on Heatmap, in grey - assume AABBs. 
+// 
+void AAP_Pawn::addStaticBoundsToHeatmap(uint8 *pixels, float gx, float gy){
+	float tx, ty, rx, ry;
+	for (int32 i = 0; i < staticActors.Num(); i++) {	//****test array
+		UE_LOG(LogTemp, Warning, TEXT("Static actor name:  %s maxB: %s orig: %s"), *staticActors[i]->actor->GetName(), *staticActors[i]->maxBounds.ToString(), *staticActors[i]->org.ToString());
+		tx = ty = 0.0f;
+		while (tx <= staticActors[i]->maxBounds.X){
+			rx = staticActors[i]->org.X - staticActors[i]->maxBounds.X + 2.0f*tx;
+			ty = 0.0f;
+			while (ty <= staticActors[i]->maxBounds.Y) {
+				ry = staticActors[i]->org.Y - staticActors[i]->maxBounds.Y + 2.0f*ty;
+				int xp = getGridPos(rx, minX, gx);	//calc array pos
+				int yp = getGridPos(ry, minY, gy);
+				pixels[4 * (xp + yp*w) + 2] = 50;	//draw STATIC obj in grey
+				pixels[4 * (xp + yp*w)] = 50;	
+				pixels[4 * (xp + yp*w) + 1] = 50;	
+				pixels[4 * (xp + yp*w) + 3] = 100;	
+				ty += gy*0.5f;	//increase rad by half grid width each time
+			}
+			tx += gx*0.5f;
+		}
+	}
+}
+
+
 
 void AAP_Pawn::updateLastPositionInArrays(){
 	float diffT = totTime - prevTime;	//get LAST pos

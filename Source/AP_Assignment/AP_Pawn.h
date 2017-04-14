@@ -95,11 +95,11 @@ public:
 	unsigned int getGridPos(float rx, float minX, float gx);
 	float maxX, maxY, minX, minY, pawnRad;
 	int w, h;
+	struct ActorAndBounds {
+		AActor *actor;
+		FVector maxBounds, org;
+		ActorAndBounds(AActor* a, FVector o, FVector mb) { actor = a; org = o; maxBounds = mb; }
+	};
+	TArray<ActorAndBounds*> staticActors;
+	void addStaticBoundsToHeatmap(uint8 *pixels, float gx, float gy);
 };
-
-
-
-
-
-
-
