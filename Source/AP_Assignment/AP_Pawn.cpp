@@ -118,7 +118,7 @@ void AAP_Pawn::BeginPlay(){
 	}
 	GetActorBounds(true, orig, maxB);
 	pawnRad = maxB.X;
-	h = w = 256;	//****NOMINAL
+	h = w = 1024;	//****NOMINAL
 }
 
 // Called every frame
@@ -189,7 +189,7 @@ void AAP_Pawn::rotatePawn(float r) {
 		float gx = (maxX - minX) / (float)w;  	//calc 'grid' sizes
 		float gy = (maxY-minY) / (float)h;
 
-		const int NUM_CHKS = 36;	//num of times to calc ang around ctr
+		const int NUM_CHKS = w / 7;	//num of times to calc ang around ctr
 		float angle = FMath::DegreesToRadians(360.0f / ((float)NUM_CHKS));
 		float tr, rx, ry;	//****
 		for (int i = 0; i < pawnPs.Num(); i++) {	//process each pawn pos
@@ -215,7 +215,7 @@ void AAP_Pawn::rotatePawn(float r) {
 		FString p = FPlatformMisc::GameDir();	//get base folder of project
 		addStaticBoundsToHeatmap(pixels, gx, gy);	//add static objs to Heatmap
 		FFileHelper::SaveStringToFile(allPawnPos, *FString::Printf(TEXT("%sHeatmapPos.txt"),*p));	//save x,y,z & dt
-		outputArrayCSVfile(w, h, pixels, p + "Heatmap.csv");	//for testing / debugging
+//		outputArrayCSVfile(w, h, pixels, p + "Heatmap.csv");	//for testing / debugging
 		SaveTexture2DDebug(pixels, w, h, p + "Heatmap.png");	//create Heatmap as PNG
 	}
 }
