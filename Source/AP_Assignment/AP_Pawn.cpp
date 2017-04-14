@@ -5,9 +5,12 @@
 #include "Target.h"
 #include "Perception/AISense_Sight.h"	//used to register this pawn
 #include "Wall.h"	//****
-#include "FileHelpers.h"
+#include "FileHelpers.h"	//for file I/O
 #include "HighResScreenShot.h"
 
+//
+// Taken from: https://forums.unrealengine.com/showthread.php?104816-How-to-save-UTexture2D-to-PNG-file
+//
 void SaveTexture2DDebug(const uint8* PPixelData, int width, int height, FString Filename) {
 	TArray<FColor> OutBMP;
 	int w = width;
@@ -61,10 +64,8 @@ AAP_Pawn::AAP_Pawn(){
 	camera->SetRelativeLocation(FVector(-450.0f, 0.0f, 350.0f));
 	camera->SetRelativeRotation(FRotator(-45.0f, 0.0f, 0.0f));
 
-	isMovingFwd = false;	//****
-	isMovingRgt = false;
+	isMovingFwd = isMovingRgt = interp = false;
 	rad = 100.0f;
-	interp = false;
 	rotationSpeed = 1.0f;
 	totTime = prevTime = maxTimeAtPos = 0.0f;
 }
@@ -95,7 +96,6 @@ void AAP_Pawn::BeginPlay(){
 
 	//**** for Heatmap
 	FVector orig, maxB;
-//	for (TActorIterator<AStaticMeshActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
 	for (TActorIterator<AActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
 //		UE_LOG(LogTemp, Warning, TEXT("name:  %s"), *ActorItr->GetName());
 		if (ActorItr->GetName().Contains("Floor")) {	//get sizes for Heatmap
@@ -116,10 +116,6 @@ void AAP_Pawn::BeginPlay(){
 			}
 		}
 	}
-	//for (int32 i = 0; i < staticActors.Num(); i++) {	//****test array
-	//	UE_LOG(LogTemp, Warning, TEXT("Static actor name:  %s maxB: %s"), *staticActors[i]->actor->GetName(), *staticActors[i]->maxBounds.ToString());
-	//}
-
 	GetActorBounds(true, orig, maxB);
 	pawnRad = maxB.X;
 	h = w = 256;	//****NOMINAL
@@ -216,10 +212,11 @@ void AAP_Pawn::rotatePawn(float r) {
 				tr += gx*0.5f;	//increase rad by half grid width each time
 			}
 		}
-		addStaticBoundsToHeatmap(pixels, gx, gy);
-		FFileHelper::SaveStringToFile(allPawnPos, TEXT("pawnPos.txt"));	//save x,y,z & dt
-		outputArrayCSVfile(w, h, pixels);	//for testing / debugging
-		SaveTexture2DDebug(pixels, w, h, "newPawnPos.png");	//create Heatmap as PNG
+		FString p = FPlatformMisc::GameDir();	//get base folder of project
+		addStaticBoundsToHeatmap(pixels, gx, gy);	//add static objs to Heatmap
+		FFileHelper::SaveStringToFile(allPawnPos, *FString::Printf(TEXT("%sHeatmapPos.txt"),*p));	//save x,y,z & dt
+		outputArrayCSVfile(w, h, pixels, p + "Heatmap.csv");	//for testing / debugging
+		SaveTexture2DDebug(pixels, w, h, p + "Heatmap.png");	//create Heatmap as PNG
 	}
 }
 //
@@ -248,8 +245,7 @@ void AAP_Pawn::addStaticBoundsToHeatmap(uint8 *pixels, float gx, float gy){
 	}
 }
 
-
-
+// needed, as last pos not set in file because NO pos chg.
 void AAP_Pawn::updateLastPositionInArrays(){
 	float diffT = totTime - prevTime;	//get LAST pos
 	if (diffT > maxTimeAtPos) maxTimeAtPos = diffT;
@@ -261,14 +257,14 @@ void AAP_Pawn::updateLastPositionInArrays(){
 	allPawnPos += d + "\r\n";	//append for txt output
 }
 
-void AAP_Pawn::outputArrayCSVfile(int w, int h, uint8 *pixels){
+void AAP_Pawn::outputArrayCSVfile(int w, int h, uint8 *pixels, FString filename){
 	FString arrayOut = "Num,Value\n";
 	for (int i = 0; i < w*h * 4; i++)
 		arrayOut += FString::Printf(TEXT("%d,%d\n"), i, pixels[i]);
 	arrayOut += FString::Printf(TEXT("\nMin,=MIN(B2:B%d)"), w*h * 4 + 1);	//For Excel, output Summary stats
 	arrayOut += FString::Printf(TEXT("\nMax,=MAX(B2:B%d)"), w*h * 4 + 1);
 	arrayOut += FString::Printf(TEXT("\nAvg,=AVERAGE(B2:B%d)\n"), w*h * 4 + 1);
-	FFileHelper::SaveStringToFile(arrayOut, TEXT("pawnPos.csv"));
+	FFileHelper::SaveStringToFile(arrayOut, *filename);
 }
 
 unsigned int AAP_Pawn::getGridPos(float rx, float minX, float gx){
@@ -338,11 +334,9 @@ void AAP_Pawn::OnBeginOverlap(UPrimitiveComponent *OverlappedComp, AActor *Other
 		//			TraceParams.AddIgnoredActor(actorToIgnore);
 
 		FHitResult hit = FHitResult(ForceInit); //Re-initialize hit info
-		FQuat q; q = FQuat::Identity;
 //		DrawDebugCapsule(GetWorld(), curPos, rad / 3.0f, 10.0f, FQuat(), FColor::Cyan, true, 3.0f);		//**** CRASHES!!!
 //		DrawDebugCapsule(GetWorld(), curPos, rad / 3.0f, 10.0f, FQuat::Identity, FColor::Cyan, true, 3.0f);		
 		GetWorld()->DebugDrawTraceTag = TEXT("collCapTrace");	//shows collision with shape
-//		GetWorld()->SweepSingleByChannel(hit, curPos, endTrace, FQuat(), ECC_Visibility, FCollisionShape::MakeCapsule(rad / 3.0f, 10.0f), TraceParams);
 		GetWorld()->SweepSingleByChannel(hit, curPos, endTrace, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeCapsule(rad / 3.0f, 10.0f), TraceParams);
 		UE_LOG(LogTemp, Warning, TEXT("hit: %s"), *hit.ToString());
 

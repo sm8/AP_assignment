@@ -91,7 +91,7 @@ public:
 	TArray<PosData> pawnPs;
 	TArray<FString> pawnPositions;
 	FString allPawnPos;
-	void outputArrayCSVfile(int w, int h, uint8 *pixels);
+	void outputArrayCSVfile(int w, int h, uint8 *pixels, FString filename);
 	unsigned int getGridPos(float rx, float minX, float gx);
 	float maxX, maxY, minX, minY, pawnRad;
 	int w, h;
