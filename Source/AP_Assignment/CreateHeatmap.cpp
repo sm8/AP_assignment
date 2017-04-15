@@ -41,12 +41,13 @@ ACreateHeatmap::ACreateHeatmap(){
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	totTime = prevTime = maxTimeAtPos = pawnRad = 0.0f;
+	totTime = prevTime = maxTimeAtPos = playerRad = 0.0f;
 	nameOfPlatform = "Floor";
 	nameOfPlayerToTrack = "Player";
 	player = NULL;
 	prevLoc = FVector::ZeroVector;
 	heatMapProcessed = false;
+	widthOfHeatmapInPixels = heightOfHeatmapInPixels = 1024;
 }
 
 // Called when the game starts or when spawned
@@ -55,6 +56,7 @@ void ACreateHeatmap::BeginPlay(){
 	
 	//**** for Heatmap
 	FVector orig, maxB;
+	w = widthOfHeatmapInPixels; h = heightOfHeatmapInPixels;
 	for (TActorIterator<AActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
 		//		UE_LOG(LogTemp, Warning, TEXT("name:  %s"), *ActorItr->GetName());
 		if (ActorItr->GetName().Contains(nameOfPlatform)) {	//get sizes for Heatmap
@@ -64,7 +66,7 @@ void ACreateHeatmap::BeginPlay(){
 		} else if (ActorItr->GetName().Contains(nameOfPlayerToTrack)) {
 			player = (APawn*)*ActorItr;
 			player->GetActorBounds(true, orig, maxB);	//CHANGE to player controller???
-			pawnRad = maxB.X;
+			playerRad = maxB.X;
 			player->InputComponent->BindAxis(TEXT("SaveHeatmap"));
 		}
 		else {	//find ALL STATIC mesh comps, so can chk whether static mobility
@@ -80,13 +82,6 @@ void ACreateHeatmap::BeginPlay(){
 			}
 		}
 	}
-	h = w = 1024;	//****NOMINAL
-}
-
-void ACreateHeatmap::SetupPlayerInputComponent(class UInputComponent* InputComponent) {
-	Super::SetupPlayerInputComponent(InputComponent);
-	// Respond when "SaveHeatmap" key is pressed or released.
-//	InputComponent->BindAction("SaveHeatmap", IE_Released, this, &ACreateHeatmap::saveHeatmap);
 }
 
 // Called every frame
@@ -111,24 +106,25 @@ void ACreateHeatmap::saveHeatmap(){
 		updateLastPositionInArrays();
 
 		uint8 *pixels = new uint8[w*h * 4];	//4*8bits for each colour & alpha
-		for (int i = 0; i < w*h * 4; i++) pixels[i] = 0;	//init
+		for (unsigned int i = 0; i < w*h * 4; i++) pixels[i] = 0;	//init
 
 		float gx = (maxX - minX) / (float)w;  	//calc 'grid' sizes
 		float gy = (maxY - minY) / (float)h;
+		addStaticBoundsToHeatmap(pixels, gx, gy);	//add static objs to Heatmap
 
 		const int NUM_CHKS = w / 7;	//num of times to calc ang around ctr
 		float angle = FMath::DegreesToRadians(360.0f / ((float)NUM_CHKS));
 		float tr, rx, ry;
-		for (int i = 0; i < pawnPs.Num(); i++) {	//process each pawn pos
+		for (int i = 0; i < playerPos.Num(); i++) {	//process each player pos
 			tr = 0.0f;	//start at ctr. This is inefficient!
-			while (tr < pawnRad) {
+			while (tr < playerRad) {
 				for (int k = 0; k < NUM_CHKS; k++) {	//chk around ctr
-					rx = pawnPs[i].x; ry = pawnPs[i].y;
+					rx = playerPos[i].x; ry = playerPos[i].y;
 					rx += tr*FMath::Cos((float)k*angle);
 					ry += tr*FMath::Sin((float)k*angle);
 					int xp = getGridPos(rx, minX, gx);	//calc array pos
 					int yp = getGridPos(ry, minY, gy);
-					uint8 newColour = (uint8)(254.0f * pawnPs[i].dt / maxTimeAtPos) + 1;
+					uint8 newColour = (uint8)(254.0f * playerPos[i].dt / maxTimeAtPos) + 1;
 					int oldColour = pixels[4 * (xp + yp*w) + 2];
 					if (newColour > oldColour) pixels[4 * (xp + yp*w) + 2] = newColour;	//Red
 	//				pixels[4 * (xp + yp*w) + 2] |= newColour;	//Red
@@ -140,8 +136,7 @@ void ACreateHeatmap::saveHeatmap(){
 			}
 		}
 		FString p = FPlatformMisc::GameDir();	//get base folder of project
-		addStaticBoundsToHeatmap(pixels, gx, gy);	//add static objs to Heatmap
-		FFileHelper::SaveStringToFile(allPawnPos, *FString::Printf(TEXT("%sHeatmapPos.txt"), *p));	//save x,y,z & dt
+		FFileHelper::SaveStringToFile(allPlayerPos, *FString::Printf(TEXT("%sHeatmapPos.txt"), *p));	//save x,y,z & dt
 	//	outputArrayCSVfile(w, h, pixels, p + "Heatmap.csv");	//for testing / debugging
 		SaveTexture2DDebug(pixels, w, h, p + "Heatmap.png");	//create Heatmap as PNG
 		heatMapProcessed = true;
@@ -190,22 +185,22 @@ void ACreateHeatmap::outputArrayCSVfile(int w, int h, uint8 * pixels, FString fi
 void ACreateHeatmap::updateLastPositionInArrays(){
 	float diffT = totTime - prevTime;	//get LAST pos
 	if (diffT > maxTimeAtPos) maxTimeAtPos = diffT;
-	pawnPs[pawnPs.Num() - 1].dt = diffT;	//change last array time
+	playerPos[playerPos.Num() - 1].dt = diffT;	//change last array time
 	FVector newLocation = player->GetActorLocation();
 	FString d = FString::Printf(TEXT("%f,%f,%f,%f"), newLocation.X, newLocation.Y, newLocation.Z, diffT);
-	pawnPositions.RemoveAt(pawnPositions.Num() - 1);	//remove last pos
-	pawnPositions.Add(d);	//add to dyn string array
-	allPawnPos += d + "\r\n";	//append for txt output
+	playerPositions.RemoveAt(playerPositions.Num() - 1);	//remove last pos
+	playerPositions.Add(d);	//add to dyn string array
+	allPlayerPos += d + "\r\n";	//append for txt output
 }
 
 void ACreateHeatmap::updatePositionData(FVector &newLocation){
 	float diffT = totTime - prevTime;	//****for Heatmap data
 	if (diffT > maxTimeAtPos) maxTimeAtPos = diffT;
 	PosData p(newLocation.X, newLocation.Y, newLocation.Z, diffT);
-	pawnPs.Add(p);	//add to dyn array
+	playerPos.Add(p);	//add to dyn array
 	FString d = FString::Printf(TEXT("%f,%f,%f,%f"), newLocation.X, newLocation.Y, newLocation.Z, diffT);
-	pawnPositions.Add(d);	//add to dyn string array
-	allPawnPos += d + "\r\n";	//append for txt output
+	playerPositions.Add(d);	//add to dyn string array
+	allPlayerPos += d + "\r\n";	//append for txt output
 	prevTime = totTime;
 }
 

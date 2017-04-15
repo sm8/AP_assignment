@@ -2,11 +2,11 @@
 
 #pragma once
 
-#include "GameFramework/Pawn.h"
+#include "GameFramework/Actor.h"
 #include "CreateHeatmap.generated.h"
 
 UCLASS()
-class AP_ASSIGNMENT_API ACreateHeatmap : public APawn{
+class AP_ASSIGNMENT_API ACreateHeatmap : public AActor {
 	GENERATED_BODY()
 	
 public:	
@@ -23,17 +23,21 @@ public:
 		FString nameOfPlatform;
 	UPROPERTY(EditAnywhere)
 		FString nameOfPlayerToTrack;
+	UPROPERTY(EditAnywhere)
+		unsigned int widthOfHeatmapInPixels;
+	UPROPERTY(EditAnywhere)
+		unsigned int heightOfHeatmapInPixels;
 
 	float totTime, prevTime, maxTimeAtPos;	//for Heatmap 
 	struct PosData {
 		float x, y, z, dt;
 		PosData(float nx, float ny, float nz, float ndt) { x = nx; y = ny; z = nz; dt = ndt; }
 	};
-	TArray<PosData> pawnPs;
-	TArray<FString> pawnPositions;
-	FString allPawnPos;
-	float maxX, maxY, minX, minY, pawnRad;
-	int w, h;
+	TArray<PosData> playerPos;
+	TArray<FString> playerPositions;
+	FString allPlayerPos;
+	float maxX, maxY, minX, minY, playerRad;
+	unsigned int w, h;
 	struct ActorAndBounds {
 		AActor *actor;
 		FVector maxBounds, org;
@@ -46,8 +50,6 @@ public:
 	void updateLastPositionInArrays();
 	void updatePositionData(FVector &newLocation);
 	unsigned int getGridPos(float rx, float minX, float gx);
-	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
 	void saveHeatmap();
 	FVector prevLoc;
 	APawn *player;
