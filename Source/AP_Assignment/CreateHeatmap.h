@@ -15,7 +15,7 @@ public:
 
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-	
+
 	// Called every frame
 	virtual void Tick( float DeltaSeconds ) override;
 
@@ -27,6 +27,10 @@ public:
 		unsigned int widthOfHeatmapInPixels;
 	UPROPERTY(EditAnywhere)
 		unsigned int heightOfHeatmapInPixels;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = PlayerMovementColour)
+		FColor playerMoveCol;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = StaticObjectColour)
+		FColor staticObjCol;
 
 	float totTime, prevTime, maxTimeAtPos;	//for Heatmap 
 	struct PosData {
@@ -46,12 +50,20 @@ public:
 	TArray<ActorAndBounds*> staticActors;
 	void SaveTexture2DDebug(const uint8* PPixelData, int width, int height, FString Filename);
 	void addStaticBoundsToHeatmap(uint8 *pixels, float gx, float gy);
+	void set32BitPixel(uint8 *pixels, int pos, uint8 r, uint8 g, uint8 b, uint8 a);
 	void outputArrayCSVfile(int w, int h, uint8 *pixels, FString filename);
 	void updateLastPositionInArrays();
 	void updatePositionData(FVector &newLocation);
+	void addPlayerPosToTextArray(FVector & newLocation, float diffT);
 	unsigned int getGridPos(float rx, float minX, float gx);
 	void saveHeatmap();
+	void clearArrays(uint8 * pixels);
+	bool checkBindingIsSetup(FString axisMapName);
+	float calcDiffInTime();
+
 	FVector prevLoc;
 	APawn *player;
+	AActor *platform;
 	bool heatMapProcessed;
+	const int BPP = 4; //Bytes per pixel
 };

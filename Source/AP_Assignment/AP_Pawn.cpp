@@ -103,7 +103,7 @@ void AAP_Pawn::BeginPlay(){
 			maxX = maxB.X; maxY = maxB.Y;
 			minX = -maxX; minY = -maxY;
 		}
-		else {	//find ALL STATIC mesh comps, so can chk whether static
+		else {	//find ALL STATIC mesh comps, so can chk whether static mobility
 			TArray<UStaticMeshComponent*> Components;
 			ActorItr->GetComponents<UStaticMeshComponent>(Components);
 			for (int32 i = 0; i<Components.Num(); i++){
