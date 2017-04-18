@@ -8,7 +8,7 @@
 //
 // Taken from: https://forums.unrealengine.com/showthread.php?104816-How-to-save-UTexture2D-to-PNG-file
 //
-void ACreateHeatmap::SaveTexture2DDebug(const uint8* PPixelData, int width, int height, FString Filename) {
+void ACreateHeatmap::SaveTexture2DDebug(const uint8* PPixelData, int width, int height, FString Filename){
 	TArray<FColor> OutBMP;
 	int w = width;
 	int h = height;
@@ -38,7 +38,7 @@ void ACreateHeatmap::SaveTexture2DDebug(const uint8* PPixelData, int width, int 
 
 // Sets default values
 ACreateHeatmap::ACreateHeatmap(){
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+ 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance.
 	PrimaryActorTick.bCanEverTick = true;
 
 	totTime = prevTime = maxTimeAtPos = playerRad = maxX = 0.0f;
@@ -47,7 +47,7 @@ ACreateHeatmap::ACreateHeatmap(){
 	player = NULL;
 	platform = NULL;
 	prevLoc = FVector::ZeroVector;
-	heatMapProcessed = false;
+	heatMapProcessed = textFileAnalysed = false;
 	widthOfHeatmapInPixels = heightOfHeatmapInPixels = 1024;
 	playerMoveCol = FColor(0, 100, 10, 255);	//default colours for player movement
 	staticObjCol = FColor(50, 50, 50, 100);	//by default, draw STATIC obj in grey
@@ -64,12 +64,12 @@ void ACreateHeatmap::BeginPlay(){
 		//		UE_LOG(LogTemp, Warning, TEXT("name:  %s"), *ActorItr->GetName());
 		if (ActorItr->GetName().Contains(nameOfPlatform)) {	//get sizes for Heatmap
 			platform = *ActorItr;
-			ActorItr->GetActorBounds(true, orig, maxB);
+			ActorItr->GetActorBounds(true, orig, maxB);	//get bounds of platform
 			maxX = maxB.X; maxY = maxB.Y;
 			minX = -maxX; minY = -maxY;
 		} else if (ActorItr->GetName().Contains(nameOfPlayerToTrack)) {
 			player = (APawn*)*ActorItr;
-			player->GetActorBounds(true, orig, maxB);	//CHANGE to player controller???
+			player->GetActorBounds(true, orig, maxB);	//get bounds of player
 			playerRad = maxB.X;
 		}
 		else {	//find ALL STATIC mesh comps, so can chk whether static mobility
@@ -98,13 +98,15 @@ void ACreateHeatmap::BeginPlay(){
 				staticActors.RemoveAt(i);
 		}
 	}
-	if (player == NULL) {
+	if (player == NULL) {	//if player NOT found, use default player
 		player = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
 		player->GetActorBounds(true, orig, maxB);
 		playerRad = maxB.X;
 	}
-	if (checkBindingIsSetup("SaveHeatmap"))
+	if (checkBindingIsSetup("SaveHeatmap")) {
 		player->InputComponent->BindAxis(TEXT("SaveHeatmap"));
+		player->InputComponent->BindAxis(TEXT("AnalyseTextFile")); 
+	}
 	else {
 		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, "Heatmap cannot be created. Axis mapping: SaveHeatmap has NOT been setup. Use Project settings, Input to set it up");
 		return;
@@ -135,50 +137,57 @@ void ACreateHeatmap::Tick( float DeltaTime ){
 		prevLoc = newLocation;
 	}
 
-	float val = player->InputComponent->GetAxisValue(TEXT("SaveHeatmap"));
-	if (val != 0.0f)
+	if (player->InputComponent->GetAxisValue(TEXT("SaveHeatmap")) != 0.0f)
 		saveHeatmap();
+	if (player->InputComponent->GetAxisValue(TEXT("AnalyseTextFile")))
+		analyseTextFilePositions();
 }
 
 void ACreateHeatmap::saveHeatmap(){
 	if (!heatMapProcessed) {
 		updateLastPositionInArrays();
 
-		uint8 *pixels = new uint8[w*h * BPP];	//4*8bits for each colour & alpha
-		for (unsigned int i = 0; i < w*h * BPP; i++) pixels[i] = 0;	//init
+		uint8 *pixels = createHeatMapData();
 
-		float gx = (maxX - minX) / (float)w;  	//calc 'grid' sizes
-		float gy = (maxY - minY) / (float)h;
-		addStaticBoundsToHeatmap(pixels, gx, gy);	//add static objs to Heatmap
-
-		const int NUM_CHKS = w / 7;	//num of times to calc ang around ctr
-		float angle = FMath::DegreesToRadians(360.0f / ((float)NUM_CHKS));
-		float tr, rx, ry;
-		for (int i = 0; i < playerPos.Num(); i++) {	//process each player pos
-			tr = 0.0f;	//start at ctr. This is inefficient!
-			while (tr < playerRad) {
-				for (int k = 0; k < NUM_CHKS; k++) {	//chk around ctr
-					rx = playerPos[i].x; ry = playerPos[i].y;
-					rx += tr*FMath::Cos((float)k*angle);
-					ry += tr*FMath::Sin((float)k*angle);
-					int xp = getGridPos(rx, minX, gx);	//calc array pos
-					int yp = getGridPos(ry, minY, gy);
-					uint8 newColour = (uint8)(254.0f * playerPos[i].dt / maxTimeAtPos) + 1;
-					int oldColour = pixels[BPP * (xp + yp*w) + 2];
-					if (oldColour > newColour) newColour = oldColour;	//Red
-					set32BitPixel(pixels, BPP * (xp + yp*w), newColour, playerMoveCol.G, playerMoveCol.B, playerMoveCol.A);
-				}
-				tr += gx*0.5f;	//increase rad by half grid width each time
-			}
-		}
 		FString p = FPlatformMisc::GameDir();	//get base folder of project
-		FFileHelper::SaveStringToFile(allPlayerPos, *FString::Printf(TEXT("%sHeatmapPos.csv"), *p)); //save pos & dt
+		FFileHelper::SaveStringToFile(allPlayerPos, *FString::Printf(TEXT("%sHeatmapPos.txt"), *p)); //save pos & dt
 	//	outputArrayCSVfile(w, h, pixels, p + "Heatmap.csv");	//for testing / debugging
 		SaveTexture2DDebug(pixels, w, h, p + "Heatmap.png");	//create Heatmap as PNG
 		heatMapProcessed = true;
 		clearArrays(pixels);
 		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, *FString::Printf(TEXT("Heatmap created in: %sHeatmap.png"), *p));
 	}
+}
+
+uint8* ACreateHeatmap::createHeatMapData() {
+	uint8 *pixels = new uint8[w*h * BPP];	//4*8bits for each colour & alpha
+	for (unsigned int i = 0; i < w*h * BPP; i++) pixels[i] = 0;	//init
+
+	float gx = (maxX - minX) / (float)w;  	//calc 'grid' sizes
+	float gy = (maxY - minY) / (float)h;
+	addStaticBoundsToHeatmap(pixels, gx, gy);	//add static objs to Heatmap
+
+	const int NUM_CHKS = w / 7;	//num of times to calc ang around ctr
+	float angle = FMath::DegreesToRadians(360.0f / ((float)NUM_CHKS));
+	float tr, rx, ry;
+	for (int i = 0; i < playerPos.Num(); i++) {	//process each player pos
+		tr = 0.0f;	//start at ctr. This is inefficient!
+		while (tr < playerRad) {
+			for (int k = 0; k < NUM_CHKS; k++) {	//chk around ctr
+				rx = playerPos[i].x; ry = playerPos[i].y;
+				rx += tr*FMath::Cos((float)k*angle);
+				ry += tr*FMath::Sin((float)k*angle);
+				int xp = getGridPos(rx, minX, gx);	//calc array pos
+				int yp = getGridPos(ry, minY, gy);
+				uint8 newColour = (uint8)(254.0f * playerPos[i].dt / maxTimeAtPos) + 1;
+				int oldColour = pixels[BPP * (xp + yp*w) + 2];
+				if (oldColour > newColour) newColour = oldColour;	//Red
+				set32BitPixel(pixels, BPP * (xp + yp*w), newColour, playerMoveCol.G, playerMoveCol.B, playerMoveCol.A);
+			}
+			tr += gx*0.5f;	//increase rad by half grid width each time
+		}
+	}
+	return pixels;
 }
 
 void ACreateHeatmap::clearArrays(uint8 * pixels){
@@ -263,4 +272,34 @@ unsigned int ACreateHeatmap::getGridPos(float rx, float minX, float gx) {
 	float epsilon = 0.001f;	//for possible error in calcs
 	float px = (rx - minX) / (gx + epsilon);	//calc grid pos
 	return (unsigned int)px + 1;
+}
+
+void ACreateHeatmap::analyseTextFilePositions() {
+	if (!textFileAnalysed) {
+		TArray<FString> playerPositionsAsStr;
+		FString p = FPlatformMisc::GameDir();
+		FFileHelper::LoadANSITextFileToStrings(*FString::Printf(TEXT("%sHeatmapPos.txt"), *p), NULL, playerPositionsAsStr);
+		float f[4];
+		int s;
+		playerPos.Empty();
+		maxTimeAtPos = 0.0f;
+		for (int i = 0; i < playerPositionsAsStr.Num(); i++) {
+			s = 0;
+			if (!playerPositionsAsStr[i].IsEmpty()) {
+				for (int j = 0; j < 3; j++) {
+					int pos = playerPositionsAsStr[i].Find(",", ESearchCase::IgnoreCase, ESearchDir::FromStart, s);
+					f[j] = FCString::Atof(*playerPositionsAsStr[i].Mid(s, pos));
+					s = pos + 1;
+				}
+				f[3] = FCString::Atof(*playerPositionsAsStr[i].Mid(s));
+				playerPos.Add(PosData(f[0], f[1], f[2], f[3]));
+				if (f[3] > maxTimeAtPos) maxTimeAtPos = f[3];	//in case dt is diff to that found above
+			}
+		}
+		uint8 *pixels = createHeatMapData();
+		SaveTexture2DDebug(pixels, w, h, p + "Heatmap.png");	//create Heatmap as PNG
+		clearArrays(pixels);
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, *FString::Printf(TEXT("From text file, Heatmap in: %sHeatmap.png"), *p));
+		textFileAnalysed = true;
+	}
 }

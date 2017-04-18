@@ -60,10 +60,12 @@ public:
 	void clearArrays(uint8 * pixels);
 	bool checkBindingIsSetup(FString axisMapName);
 	float calcDiffInTime();
+	void analyseTextFilePositions();
+	uint8* createHeatMapData();
 
 	FVector prevLoc;
 	APawn *player;	//Pawn needed as BindAxis used
 	AActor *platform;
-	bool heatMapProcessed;
+	bool heatMapProcessed, textFileAnalysed;
 	const int BPP = 4; //Bytes per pixel for PNG output
 };
