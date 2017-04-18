@@ -43,7 +43,7 @@ ACreateHeatmap::ACreateHeatmap(){
 
 	totTime = prevTime = maxTimeAtPos = playerRad = maxX = 0.0f;
 	nameOfPlatform = "Floor";
-	nameOfPlayerToTrack = "Player";
+	nameOfPlayerToTrack = "player0";
 	player = NULL;
 	platform = NULL;
 	prevLoc = FVector::ZeroVector;
@@ -106,9 +106,11 @@ void ACreateHeatmap::BeginPlay(){
 	if (checkBindingIsSetup("SaveHeatmap"))
 		player->InputComponent->BindAxis(TEXT("SaveHeatmap"));
 	else {
-		GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Green, "Heatmap cannot be created. Axis mapping: SaveHeatmap has NOT been setup. Use Project settings, Input to set it up");
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, "Heatmap cannot be created. Axis mapping: SaveHeatmap has NOT been setup. Use Project settings, Input to set it up");
 		return;
 	}
+	float minGrid = FMath::Min((maxX - minX) / (float)w, (maxY - minY) / (float)h);
+	chkSqVal = minGrid * minGrid  * 0.25f;	//use half grid size squared for calc of pos chg
 }
 
 bool ACreateHeatmap::checkBindingIsSetup(FString axisMapName){
@@ -128,7 +130,7 @@ void ACreateHeatmap::Tick( float DeltaTime ){
 	totTime += DeltaTime;	//used for Heatmap
 
 	FVector newLocation = player->GetActorLocation();	//get PLAYER POS!!!!
-	if ((newLocation - prevLoc).SizeSquared2D() > 0.01f) {
+	if ((newLocation - prevLoc).SizeSquared2D() > chkSqVal) {
 		updatePositionData(newLocation);	//for Heatmap
 		prevLoc = newLocation;
 	}
@@ -170,7 +172,7 @@ void ACreateHeatmap::saveHeatmap(){
 			}
 		}
 		FString p = FPlatformMisc::GameDir();	//get base folder of project
-		FFileHelper::SaveStringToFile(allPlayerPos, *FString::Printf(TEXT("%sHeatmapPos.txt"), *p)); //save pos & dt
+		FFileHelper::SaveStringToFile(allPlayerPos, *FString::Printf(TEXT("%sHeatmapPos.csv"), *p)); //save pos & dt
 	//	outputArrayCSVfile(w, h, pixels, p + "Heatmap.csv");	//for testing / debugging
 		SaveTexture2DDebug(pixels, w, h, p + "Heatmap.png");	//create Heatmap as PNG
 		heatMapProcessed = true;

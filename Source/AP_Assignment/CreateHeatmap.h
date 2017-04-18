@@ -40,7 +40,7 @@ public:
 	TArray<PosData> playerPos;
 	TArray<FString> playerPositions;
 	FString allPlayerPos;
-	float maxX, maxY, minX, minY, playerRad;
+	float maxX, maxY, minX, minY, playerRad, chkSqVal;
 	unsigned int w, h;
 	struct ActorAndBounds {
 		AActor *actor;
@@ -62,8 +62,8 @@ public:
 	float calcDiffInTime();
 
 	FVector prevLoc;
-	APawn *player;
+	APawn *player;	//Pawn needed as BindAxis used
 	AActor *platform;
 	bool heatMapProcessed;
-	const int BPP = 4; //Bytes per pixel
+	const int BPP = 4; //Bytes per pixel for PNG output
 };
