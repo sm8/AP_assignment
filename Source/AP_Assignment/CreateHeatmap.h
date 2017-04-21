@@ -6,7 +6,7 @@
 #include "CreateHeatmap.generated.h"
 
 UCLASS()
-class AP_ASSIGNMENT_API ACreateHeatmap : public AActor {
+class HEATMAP100_API ACreateHeatmap : public AActor {
 	GENERATED_BODY()
 	
 public:	
@@ -63,9 +63,16 @@ public:
 	void analyseTextFilePositions();
 	uint8* createHeatMapData();
 
+	struct Extent {
+		FVector topL, botR;
+		Extent() { topL = botR = FVector::ZeroVector;  }
+	};
+	Extent maxExtent;
+	void getMaxExtent(Extent &currHigh, FVector org, FVector box);
 	FVector prevLoc;
 	APawn *player;	//Pawn needed as BindAxis used
 	AActor *platform;
 	bool heatMapProcessed, textFileAnalysed;
 	const int BPP = 4; //Bytes per pixel for PNG output
 };
+

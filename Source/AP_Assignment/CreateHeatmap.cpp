@@ -1,9 +1,10 @@
 // SM
 
-#include "AP_Assignment.h"
+#include "Heatmap100.h"
 #include "CreateHeatmap.h"
 #include "FileHelpers.h"	//for file I/O
 #include "HighResScreenShot.h"
+#include "Engine.h"	//Req'd???
 
 //
 // Taken from: https://forums.unrealengine.com/showthread.php?104816-How-to-save-UTexture2D-to-PNG-file
@@ -53,15 +54,24 @@ ACreateHeatmap::ACreateHeatmap(){
 	staticObjCol = FColor(50, 50, 50, 100);	//by default, draw STATIC obj in grey
 }
 
+void ACreateHeatmap::getMaxExtent(Extent &currHigh, FVector org, FVector box) {
+	float xt = (org - box).X;	//calc bounds of static objs
+	float yt = (org + box).Y;
+	float xb = (org + box).X;
+	float yb = (org - box).Y;
+	if (xt < currHigh.topL.X) currHigh.topL.X = xt;
+	if (xb > currHigh.botR.X) currHigh.botR.X = xb;
+	if (yt > currHigh.topL.Y) currHigh.topL.Y = yt;
+	if (yb < currHigh.botR.Y) currHigh.botR.Y = yb;
+}
+
 // Called when the game starts or when spawned
 void ACreateHeatmap::BeginPlay(){
 	Super::BeginPlay();
 	
-	//**** for Heatmap
 	FVector orig, maxB, highMax = FVector::ZeroVector; 
 	w = widthOfHeatmapInPixels; h = heightOfHeatmapInPixels;
 	for (TActorIterator<AActor> ActorItr(GetWorld()); ActorItr; ++ActorItr) {
-		//		UE_LOG(LogTemp, Warning, TEXT("name:  %s"), *ActorItr->GetName());
 		if (ActorItr->GetName().Contains(nameOfPlatform)) {	//get sizes for Heatmap
 			platform = *ActorItr;
 			ActorItr->GetActorBounds(true, orig, maxB);	//get bounds of platform
@@ -75,13 +85,17 @@ void ACreateHeatmap::BeginPlay(){
 		else {	//find ALL STATIC mesh comps, so can chk whether static mobility
 			TArray<UStaticMeshComponent*> Components;
 			ActorItr->GetComponents<UStaticMeshComponent>(Components);
+//			FString n = ActorItr->GetName();
 			for (int32 i = 0; i<Components.Num(); i++) {
 				UStaticMeshComponent* StaticMeshComponent = Components[i];
 				if (!StaticMeshComponent->Mobility) { //assume static is 0
 					ActorItr->GetActorBounds(true, orig, maxB);	//chk bounds of static obj
-					if (maxB.X*maxB.Y > highMax.X*highMax.Y) {
+					getMaxExtent(maxExtent, orig, maxB);
+					float dx = maxExtent.botR.X - maxExtent.topL.X;
+					float dy = maxExtent.topL.Y - maxExtent.botR.Y;
+					if (dx*dy > highMax.X*highMax.Y) {
 						platform = *ActorItr;
-						highMax = maxB; //in case platform not found
+						highMax = maxExtent.botR; //in case platform not found
 					}
 					if (maxB.X > 0.0f && maxB.Y > 0.0f)	//Eg sky sphere is static but has 0 bounds
 						staticActors.Add(new ActorAndBounds(*ActorItr, orig, maxB));
@@ -98,6 +112,11 @@ void ACreateHeatmap::BeginPlay(){
 				staticActors.RemoveAt(i);
 		}
 	}
+	if (maxX < maxExtent.botR.X) maxX = maxExtent.botR.X; //ensure static objs are in bounds
+	if (maxY < maxExtent.topL.Y) maxY = maxExtent.topL.Y;
+	if (minX > maxExtent.topL.X) minX = maxExtent.topL.X;
+	if (minY > maxExtent.botR.Y) maxY = maxExtent.botR.Y;
+
 	if (player == NULL) {	//if player NOT found, use default player
 		player = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
 		player->GetActorBounds(true, orig, maxB);
@@ -268,9 +287,9 @@ void ACreateHeatmap::addPlayerPosToTextArray(FVector &newLocation, float diffT){
 	allPlayerPos += d + "\r\n";	//append for txt output
 }
 
-unsigned int ACreateHeatmap::getGridPos(float rx, float minX, float gx) {
+unsigned int ACreateHeatmap::getGridPos(float rx, float minXpos, float gx) {
 	float epsilon = 0.001f;	//for possible error in calcs
-	float px = (rx - minX) / (gx + epsilon);	//calc grid pos
+	float px = (rx - minXpos) / (gx + epsilon);	//calc grid pos
 	return (unsigned int)px + 1;
 }
 
@@ -285,7 +304,7 @@ void ACreateHeatmap::analyseTextFilePositions() {
 		maxTimeAtPos = 0.0f;
 		for (int i = 0; i < playerPositionsAsStr.Num(); i++) {
 			s = 0;
-			if (!playerPositionsAsStr[i].IsEmpty()) {
+			if (!playerPositionsAsStr[i].IsEmpty()) {	//get x,y,z & dt vals
 				for (int j = 0; j < 3; j++) {
 					int pos = playerPositionsAsStr[i].Find(",", ESearchCase::IgnoreCase, ESearchDir::FromStart, s);
 					f[j] = FCString::Atof(*playerPositionsAsStr[i].Mid(s, pos));
